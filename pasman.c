@@ -1,13 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
-void appendTo( long key, char* text, char* fname);
-void retrieveFrom( long key, char* text, char* fname);
-void createNew( long key, char* fname);
-int checkAuth( long key, long code);
-int* encrypt( long key, char* text);
-char* decrypt( long key, int* stream);
+void appendTo( uint64_t key[2], char* text, char* fname);
+void retrieveFrom( uint64_t key[2], char* text, char* fname);
+void createNew( uint64_t key[2], char* fname);
+int checkAuth( uint64_t key[2], long code);
+uint64_t* encrypt( uint64_t key[2], char* text);
+char* decrypt( uint64_t key[2], uint64_t* stream, long bytes_read);
 void encipher(unsigned int num_rounds, uint32_t v[2], uint32_t const key[4]);
 void decipher(unsigned int num_rounds, uint32_t v[2], uint32_t const key[4]);
 
@@ -36,27 +37,27 @@ void decipher(unsigned int num_rounds, uint32_t v[2], uint32_t const key[4]) {
     v[0]=v0; v[1]=v1;
 }
 
-void createNew( long key, char* fname)
+void createNew( uint64_t key[2], char* fname)
 {
   FILE* fp;
   long code;
 
   fp = fopen( fname, "w");
-  code = key * key;
+  code = (int) *key * (int) *key;
   fwrite( &code, 4, 1, fp);
   fclose( fp);
   printf( "created!\n");
 }
 
-void appendTo( long key, char* text, char* fname)
+void appendTo( uint64_t key[2], char* text, char* fname)
 {
   FILE* fp;
   long code;
-  int* stream;
+  uint64_t* stream;
 
   fp = fopen( fname, "ra");
   fread( &code, 4, 1, fp);
-  if( code == key * key)
+  if( code == (int) *key * (int) *key)
   {
     printf( "small auth success!\n");
   }
@@ -74,15 +75,15 @@ void appendTo( long key, char* text, char* fname)
   fclose( fp);
 }
 
-void retrieveFrom( long key, char* text, char* fname)
+void retrieveFrom( uint64_t key[2], char* text, char* fname)
 {
   FILE* fp;
   long code;
-  int* stream;
+  uint64_t* stream;
 
   fp = fopen( fname, "r");
   fread( &code, 4, 1, fp);
-  if( code == key * key)
+  if( code == (int) key * (int) key)
   {
     printf( "small auth success!\n");
   }
@@ -95,26 +96,65 @@ void retrieveFrom( long key, char* text, char* fname)
   code = -1;
   while( text[++code]);
 
+}
+
+uint64_t* encrypt( uint64_t key[2], char* text)
+{
+  uint64_t* encoded;
+  long i;
+  long len;
+
+  i = -1;
+  while( text[++i]);
+
+  encoded = (uint64_t*) malloc( i + i%8);
+
+  memset( encoded, 0, i + i%8);
+  memcpy( encoded, text, i);
+
+  len = (i + i%8) >> 3;
+  for( i = 0; i < len; i++)
+  {
+    encipher(64, (uint32_t*) &encoded[i], (uint32_t*) key);
+  }
+
+  //wipe out
+  memset( text, 0, len << 3);
+  free( text);
+  return encoded;
 
 }
 
-int* encrypt( long key, char* text)
+char* decrypt( uint64_t key[2], uint64_t* stream, long bytes_read)
 {
-  //TODO:
-}
+  char* text;
+  long i;
+  long len;
 
-char* decrypt( long key, int* stream)
-{
-  //TODO:
+  text = (char*) malloc( bytes_read);
+
+  memset( text, 0, bytes_read);
+  memcpy( text, stream, bytes_read);
+
+  for( i = 0; i < bytes_read; i++)
+  {
+    decipher(64, (uint32_t*) &text[i], (uint32_t*) key);
+  }
+
+  //wipe out
+  memset( stream, 0, bytes_read);
+  free( stream);
+  return text;
 }
 
 int main( int argc, char** argv)
 {
-  long key, mode;
+  uint64_t key[2];
+  int mode;
   char* text;
   char* fname;
 
-  key = atoi(argv[1]);
+  memcpy( key, argv[1], 16);
   mode = atoi(argv[2]);
   text = argv[3];
   fname = argv[4];
@@ -136,6 +176,14 @@ int main( int argc, char** argv)
   else if( mode == 2) //CREATE
   {
     createNew( key, fname);
+  }
+  else if( mode == 3) //TEST ENCRYPT, may remove after test
+  {
+    //TODO:
+  }
+  else if( mode == 4) // TEST DECRYPT, may remove after test
+  {
+    //TODO:
   }
   else
   {
